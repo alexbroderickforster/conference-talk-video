@@ -8,7 +8,8 @@ and moves the cut into the actual quiet stretch.
   snap.py start <video> <approx>   approx = where words.py says the first kept word starts.
                                    Prints a time just before speech resumes (0.25 s of room tone kept).
   snap.py end   <video> <approx>   approx = where the last kept word (or the applause) ends.
-                                   Prints a time just into the next quiet stretch.
+                                   Prints a time just into the next quiet stretch (which must begin
+                                   within 5 s of approx).
   snap.py list  <video> <from> <to>  Lists the quiet stretches in a range.
 
 Env: NOISE=-35dB (raise toward -30dB for a noisy room), MIN_SILENCE=0.3 (seconds).
@@ -43,17 +44,22 @@ def silences(video, lo, hi):
     return out
 
 
-def snap_start(video, approx):
+def snap_start(video, approx, early=1.0, late=0.5):
+    """The quiet stretch the first kept word comes out of. Whisper's estimate can be early (it puts the
+    word at the start of the quiet), so the stretch may end after approx; but it must START by
+    approx + late, or it is a pause inside the speech and cutting there would drop the opening words."""
     for a, b in silences(video, approx - 20, approx + 20):
-        if b >= approx - 1.0:
+        if b >= approx - early and a <= approx + late:
             return max(a, b - 0.25)
     return None
 
 
-def snap_end(video, approx):
-    for a, b in silences(video, approx - 5, approx + 30):
-        if a >= approx + 0.2:
-            return min(b, a + 0.3)
+def snap_end(video, approx, early=0.3, late=5.0):
+    """The first quiet stretch that begins after the last kept word (or applause) ends. A stretch that
+    begins more than `late` seconds later is not this boundary: refuse rather than keep the next speaker."""
+    for a, b in silences(video, approx - 5, approx + late + 5):
+        if a >= approx - early:
+            return min(b, a + 0.3) if a <= approx + late else None
     return None
 
 

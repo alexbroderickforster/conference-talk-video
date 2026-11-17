@@ -1,6 +1,6 @@
 {
   "name": "conference-talk-video",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Turn conference recordings into publish-ready YouTube talks: shrink, transcribe locally with word timings, cut each talk at clean word boundaries, make a short start/end review copy for a person to watch, and draft the title, description, chapters and captions.",
   "author": { "name": "alexbroderickforster", "url": "https://github.com/alexbroderickforster" },
   "homepage": "https://github.com/alexbroderickforster/conference-talk-video",

@@ -125,19 +125,98 @@ class Words(unittest.TestCase):
         self.assertIn("pause 1.10s", txt)
 
 
+def seg(a, b, text, tokens=None):
+    return {"offsets": {"from": int(a * 1000), "to": int(b * 1000)}, "text": " " + text,
+            "tokens": tokens if tokens is not None else [{"text": " " + w} for w in text.split()]}
+
+
 class Transcribe(unittest.TestCase):
-    def test_dedupe_seams(self):
-        m = load("transcribe")
-        r = {"text": " the fastest came from teams who", "offsets": {"from": 0, "to": 5000}}
-        e = {"text": " The teams who could roll back", "offsets": {"from": 5200, "to": 9000}}
-        m.dedupe_seams([r, e], [r])
+    """Regression tests for the code-review findings on the gap repair (2026-11-17)."""
+    def setUp(self):
+        self.m = load("transcribe")
+
+    def test_dedupe_trims_text_and_tokens_where_lines_meet(self):
+        r, e = seg(25, 30.4, "the fastest came from teams who"), seg(30.0, 33, "The teams who could roll back")
+        self.m.dedupe_seams([r, e], [r])
         self.assertEqual(r["text"].strip(), "the fastest came from")
+        self.assertEqual([t["text"].strip() for t in r["tokens"]], ["the", "fastest", "came", "from"])
+
+    def test_dedupe_keeps_real_repeats_a_second_apart(self):          # finding 4
+        r, e = seg(6, 8, "Please sit down."), seg(9, 10, "Sit down now.")
+        self.m.dedupe_seams([r, e], [r])
+        self.assertEqual(r["text"].strip(), "Please sit down.")
+
+    def test_split_halves_do_not_duplicate_a_line(self):             # finding 3
+        first = self.m.keep_new([seg(9, 11, "one spoken line")], 0, 10.5)
+        second = self.m.keep_new([seg(9, 11, "one spoken line")], 9.5, 20, have=first)
+        self.assertEqual(len(first), 1)
+        self.assertEqual(second, [])
+        twice = self.m.keep_new([seg(9, 11, "one spoken line"), seg(9, 11, "one spoken line")], 0, 20)
+        self.assertEqual(len(twice), 1)
+
+    def test_recovered_noise_and_echoes_are_dropped(self):
+        have = [seg(47, 52.0, "safer, not riskier. Thank you very much.")]
+        got = self.m.keep_new([seg(51.5, 52.6, "Thank you very much."), seg(52.6, 53.4, "March."),
+                               seg(54, 58, "Our next speaker is here.")], 52.0, 59, have=have)
+        self.assertEqual([g["text"].strip() for g in got], ["Our next speaker is here."])
+
+    def test_negative_window_is_clamped(self):                        # finding 5
+        self.assertEqual(self.m.clamp_window(-10, 40), (0.0, 30))
+        self.assertEqual(self.m.clamp_window(5, 40), (5, 40))
+        self.assertEqual(self.m.clamp_window(-3, None), (0.0, None))
+
+    def test_whole_file_run_never_silently_replaces_captions(self):  # finding 6
+        with tempfile.TemporaryDirectory() as d:
+            v = os.path.join(d, "talk.mp4"); open(v, "w").close()
+            srt = os.path.join(d, "talk.srt")
+            with open(srt, "w") as f:
+                f.write("1\n00:00:00,000 --> 00:00:02,000\nHand-fixed name\n")
+            os.environ["WHISPER_MODEL"] = os.environ.get("WHISPER_MODEL") or "/nonexistent.bin"
+            with self.assertRaises(SystemExit):
+                self.m.main([v])
+            with open(srt) as f:
+                self.assertIn("Hand-fixed", f.read())
+
+    def test_gaps_use_the_union_of_cues(self):                        # finding 7 (same logic as caption-gaps)
+        nested = [seg(0, 25, "a"), seg(10, 12, "b"), seg(20, 22, "c")]
+        self.assertEqual(self.m.caption_gaps(nested, 25, 6), [])
+        self.assertEqual(self.m.caption_gaps([seg(0, 5, "a"), seg(30, 31, "b")], 40, 6), [(5, 30), (31, 40)])
 
     def test_shift_moves_tokens(self):
-        m = load("transcribe")
-        s = m.shift([{"offsets": {"from": 0, "to": 1000}, "tokens": [{"offsets": {"from": 10, "to": 20}}]}], 5000)
+        s = self.m.shift([{"offsets": {"from": 0, "to": 1000}, "tokens": [{"offsets": {"from": 10, "to": 20}}]}], 5000)
         self.assertEqual(s[0]["timestamps"]["from"], "00:00:05,000")
         self.assertEqual(s[0]["tokens"][0]["offsets"]["from"], 5010)
+
+
+class CaptionGaps(unittest.TestCase):
+    def test_nested_cues_are_not_a_gap(self):                         # finding 7
+        m = load("caption-gaps")
+        self.assertEqual(m.uncovered([(0, 25), (10, 12), (20, 22)], 25, 6), [])
+        self.assertEqual(m.uncovered([(0, 5.7), (30, 33)], 52, 6), [(5.7, 30), (33, 52)])
+
+
+class Snap(unittest.TestCase):
+    def setUp(self):
+        self.m = load("snap")
+
+    def fake(self, quiet):
+        self.m.silences = lambda video, lo, hi: [q for q in quiet if q[1] >= lo and q[0] <= hi]
+
+    def test_start_never_uses_a_pause_inside_the_speech(self):        # finding 1
+        self.fake([(110, 111)])
+        self.assertIsNone(self.m.snap_start("v", 100))
+
+    def test_start_uses_the_quiet_before_an_early_estimate(self):
+        self.fake([(0, 3.01), (4.9, 5.3)])          # whisper said 0.0 s; speech starts at 3.0 s
+        self.assertAlmostEqual(self.m.snap_start("v", 0), 2.76)
+
+    def test_end_takes_the_pause_right_after_the_last_word(self):     # finding 2
+        self.fake([(100.05, 100.75), (110, 111)])
+        self.assertAlmostEqual(self.m.snap_end("v", 100), 100.35)
+
+    def test_end_refuses_a_far_pause(self):
+        self.fake([(110, 111)])
+        self.assertIsNone(self.m.snap_end("v", 100))
 
 
 class Upload(unittest.TestCase):

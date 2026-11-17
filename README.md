@@ -64,6 +64,7 @@ They work without Claude too.
 | `snap.py` | Moves a rough cut point into the real quiet in the audio |
 | `cut.sh` | Cuts one talk with soft fades; optional audio delay and loudness levelling |
 | `review-proxy.sh` | 540p preview of the first and last 45 s, for a person to check |
+| `caption-gaps.py` | Before upload: lists stretches with sound but no captions |
 | `shift-srt.py` | Moves captions after a trim, or extracts one talk's captions from the full recording |
 | `youtube-text.py` | Suggests chapter points; builds and checks the title, description, chapters and tags |
 | `upload.py` | Optional: uploads as private with captions, thumbnail and playlist (YouTube Data API) |

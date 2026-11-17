@@ -44,6 +44,9 @@ for t, c in zip(truth, cuts):
     gaps = [b - a for a, b in zip(times, times[1:])]
     if gaps and max(gaps) > 15:
         fails.append(f"{slug}.srt has a {max(gaps)}s hole in the captions")
+    texts = [re.sub(r"\W+", " ", t).strip().lower() for t in re.findall(r"-->[^\n]*\n(.+)", srt)]
+    if any(a == b for a, b in zip(texts, texts[1:])):
+        fails.append(f"{slug}.srt repeats a caption line")
     print(f"  {slug}: cut {start:.2f}-{end:.2f}s (truth {t['start']:.2f}-{t['end']:.2f}s)")
 log = open(out + ".log").read()
 if "PROBLEM:" in log:

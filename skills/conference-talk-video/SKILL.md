@@ -68,7 +68,11 @@ length. Fix any cut they flag, then re-check the new edge with `words.py` and `s
    being uploaded. After a trim, re-transcribe, or move existing captions with
    `scripts/shift-srt.py talk.srt --by -<seconds trimmed>`; `--window START END` extracts a talk's
    captions from the full recording's SRT.
-2. Fix names and product terms in `talk.srt` (keep a glossary per event).
+2. Fix names and product terms in `talk.srt` (keep a glossary per event). A later whole-file
+   `transcribe.sh` refuses to replace a `talk.srt` that already exists; `--force` replaces it and keeps
+   the old one as `talk.srt.bak`.
+   Before uploading, run `scripts/caption-gaps.py talk.mp4 talk.srt`: it lists stretches with sound but
+   no captions. Listen to each: applause is fine; speech means re-transcribe or fix the SRT.
 3. Chapters, done automatically: `scripts/youtube-text.py suggest talk.srt` proposes points at natural breaks.
    Read the transcript and name each one (7–10 for a 20–40 min talk; under 45 characters, sentence case).
    Save them as `chapters.txt` with one `m:ss Title` per line, the first at `0:00`.

@@ -11,7 +11,7 @@ step(){ printf '\n== %s\n' "$1"; }
 step "0. Check tools";            "$S/doctor.sh"
 step "Make the sample recording"; "$HERE/make-sample.sh" "$OUT"
 REC="$OUT/sample-recording.mp4"
-step "2. Transcribe";             "$S/transcribe.sh" "$REC"
+step "2. Transcribe";             "$S/transcribe.sh" "$REC" --force
 step "3. Find each talk";         "$S/find-talks.py" "$OUT/sample-recording.srt" "$OUT/schedule.txt"
 "$S/find-talks.py" "$OUT/sample-recording.srt" "$OUT/schedule.txt" --json > "$OUT/found.json"
 
@@ -38,7 +38,7 @@ while IFS=$'\t' read -r slug start end speaker company title <&3; do
   T="$OUT/$slug.mp4"
   step "4. Cut: $speaker";          "$S/cut.sh" "$REC" "$start" "$end" "$T"
   step "5. Review copy";            "$S/review-proxy.sh" "$T" 15
-  step "6. YouTube text";           "$S/transcribe.sh" "$T" >/dev/null
+  step "6. YouTube text";           "$S/transcribe.sh" "$T" --force >/dev/null
   "$S/youtube-text.py" suggest "$OUT/$slug.srt" --n 4 | tee "$OUT/$slug.suggest.txt"
   # Claude would name these; the demo uses each point's first few words.
   python3 - "$OUT/$slug.suggest.txt" > "$OUT/$slug.chapters.txt" <<'PY'
