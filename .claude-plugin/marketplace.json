@@ -1,0 +1,14 @@
+{
+  "name": "conference-talk-video",
+  "owner": { "name": "alexbroderickforster", "url": "https://github.com/alexbroderickforster" },
+  "metadata": { "description": "A Claude Code skill that turns conference recordings into publish-ready YouTube talks." },
+  "plugins": [
+    {
+      "name": "conference-talk-video",
+      "source": "./",
+      "description": "Cut conference recordings into individual talks with clean starts and ends, a short review copy per talk, and ready-to-paste YouTube text, chapters and captions. Everything runs locally.",
+      "version": "0.2.0",
+      "category": "productivity"
+    }
+  ]
+}

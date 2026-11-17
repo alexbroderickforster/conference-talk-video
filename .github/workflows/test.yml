@@ -1,0 +1,77 @@
+name: test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      WHISPER_TAG: v1.9.2
+      WHISPER_MODEL: ${{ github.workspace }}/.models/ggml-base.en.bin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg espeak-ng cmake build-essential
+
+      - name: Cache whisper.cpp build (Linux)
+        if: runner.os == 'Linux'
+        id: wcache
+        uses: actions/cache@v4
+        with:
+          path: ~/whisper.cpp/build
+          key: whisper-${{ runner.os }}-${{ env.WHISPER_TAG }}
+
+      - name: Build whisper.cpp (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          [ -d ~/whisper.cpp/.git ] || git clone -q --depth 1 --branch "$WHISPER_TAG" https://github.com/ggml-org/whisper.cpp ~/whisper.cpp
+          cd ~/whisper.cpp
+          [ -x build/bin/whisper-cli ] || { cmake -B build -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF >/dev/null && cmake --build build -j --config Release --target whisper-cli >/dev/null; }
+          echo "WHISPER_BIN=$HOME/whisper.cpp/build/bin/whisper-cli" >> "$GITHUB_ENV"
+
+      - name: Install tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg whisper-cpp
+
+      - name: Cache whisper model
+        uses: actions/cache@v4
+        with:
+          path: .models
+          key: whisper-model-base.en
+
+      - name: Download model
+        run: |
+          mkdir -p .models
+          [ -s "$WHISPER_MODEL" ] || curl -fsSL -o "$WHISPER_MODEL" https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin
+
+      - name: Doctor
+        run: skills/conference-talk-video/scripts/doctor.sh
+
+      - name: Tests (unit + end-to-end on the synthetic sample)
+        run: E2E=1 tests/run.sh
+
+      - name: Keep the sample outputs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-output-${{ matrix.os }}
+          path: |
+            tests/out/*.srt
+            tests/out/*.youtube.md
+            tests/out/cuts.tsv
+            tests/out.log
+          if-no-files-found: ignore

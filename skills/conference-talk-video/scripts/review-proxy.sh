@@ -12,17 +12,17 @@ ENC=(-c:v libx264 -preset veryfast -crf 28 -movflags +faststart)
 if [[ -n "$HAS_A" ]]; then ENC+=(-c:a aac -b:a 96k); fi
 if ! awk -v d="$DUR" -v n="$N" 'BEGIN{exit !(d > 2*n)}'; then   # short cut: send the whole thing, small
   if [[ -n "$HAS_A" ]]; then M=(-map 0:v:0 -map 0:a:0); else M=(-map 0:v:0 -an); fi
-  ffmpeg -v error -y -i "$IN" -vf "$FIT" "${M[@]}" "${ENC[@]}" "$OUT"
+  ffmpeg -nostdin -v error -y -i "$IN" -vf "$FIT" "${M[@]}" "${ENC[@]}" "$OUT"
   echo "$OUT  (whole cut, $(printf %.0f "$DUR")s — shorter than 2x${N}s)"; exit 0
 fi
 if [[ -n "$HAS_A" ]]; then
-  ffmpeg -v error -y -t "$N" -i "$IN" -sseof "-$N" -i "$IN" \
+  ffmpeg -nostdin -v error -y -t "$N" -i "$IN" -sseof "-$N" -i "$IN" \
     -f lavfi -t 1 -i "color=black:s=960x540:r=30" -f lavfi -t 1 -i "anullsrc=r=48000:cl=stereo" \
     -filter_complex "[0:v]$FIT[h];[0:a]aresample=48000,aformat=channel_layouts=stereo[ha];\
 [1:v]$FIT[t];[1:a]aresample=48000,aformat=channel_layouts=stereo[ta];[2:v]format=yuv420p,setsar=1[b];\
 [h][ha][b][3:a][t][ta]concat=n=3:v=1:a=1[v][a]" -map "[v]" -map "[a]" "${ENC[@]}" "$OUT"
 else
-  ffmpeg -v error -y -t "$N" -i "$IN" -sseof "-$N" -i "$IN" -f lavfi -t 1 -i "color=black:s=960x540:r=30" \
+  ffmpeg -nostdin -v error -y -t "$N" -i "$IN" -sseof "-$N" -i "$IN" -f lavfi -t 1 -i "color=black:s=960x540:r=30" \
     -filter_complex "[0:v]$FIT[h];[1:v]$FIT[t];[2:v]format=yuv420p,setsar=1[b];[h][b][t]concat=n=3:v=1:a=0[v]" \
     -map "[v]" "${ENC[@]}" "$OUT"
 fi

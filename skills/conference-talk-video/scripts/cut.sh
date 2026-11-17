@@ -11,7 +11,7 @@ FO=$(awk -v d="$DUR" -v f="$F" 'BEGIN{printf "%.3f", d-f}')
 AF="afade=t=in:d=$F,afade=t=out:st=$FO:d=$F"
 [[ "$DLY" != 0 ]] && AF="adelay=${DLY}:all=1,$AF"
 [[ "${LOUDNORM:-0}" == 1 ]] && AF="$AF,loudnorm=I=-16:TP=-1.5:LRA=11"
-ffmpeg -v warning -stats -y -ss "$SS" -i "$IN" -t "$DUR" \
+ffmpeg -nostdin -v warning -stats -y -ss "$SS" -i "$IN" -t "$DUR" \
   -vf "fade=t=in:d=$F,fade=t=out:st=$FO:d=$F" -af "$AF" \
   -c:v libx264 -preset medium -crf 16 -pix_fmt yuv420p -c:a aac -b:a 192k -ar 48000 -movflags +faststart "$OUT"
 echo "$OUT  ($DUR s)"
