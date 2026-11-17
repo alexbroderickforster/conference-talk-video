@@ -62,6 +62,12 @@ class FindTalks(unittest.TestCase):
         self.assertEqual(res[0]["start_hint"], 0.5)
         self.assertEqual(res[1]["start_hint"], 20.0)       # "Okerfor": whisper's spelling still matches
 
+    def test_garbled_surname_still_found(self):
+        m = load("find-talks")
+        self.assertGreaterEqual(m.score("Dana Reyes", "welcome Dana Raised from Acme Robotics", "Acme Robotics"), 0.8)
+        self.assertLess(m.score("Dana Reyes", "Thank you, Dana.", "Acme Robotics"), 0.8)
+        self.assertLess(m.score("Sam Okafor", "Today we ship every Tuesday", "Northwind"), 0.8)
+
     def test_schedule_parsing(self):
         m = load("find-talks")
         with tempfile.TemporaryDirectory() as d:

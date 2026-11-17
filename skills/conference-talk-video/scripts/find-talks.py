@@ -58,8 +58,9 @@ def words(s):
     return re.findall(r"[a-z0-9']+", s.lower())
 
 
-def score(name, text):
-    """Best fuzzy match of the speaker's surname (and first name) against the cue's words, 0..1."""
+def score(name, text, company=""):
+    """How well a cue matches the speaker, 0..1. Whisper often garbles surnames ("Reyes" -> "Raised"),
+    so an exact first name, or the company named in the same line, also counts."""
     parts = [p for p in words(name) if len(p) > 2] or words(name)
     if not parts:
         return 0.0
@@ -68,13 +69,17 @@ def score(name, text):
         return max((difflib.SequenceMatcher(None, p, w).ratio() for w in tw), default=0.0)
     last = best(parts[-1])
     first = best(parts[0]) if len(parts) > 1 else last
-    return max(last, (last + first) / 2 if first > 0.85 else 0)
+    sc = max(last, 0.6 * first + 0.4 * last if first >= 0.9 else 0.0)
+    cw = [w for w in words(company) if len(w) > 2 and w not in ("inc", "ltd", "llc", "the", "and")]
+    if cw and max(best(w) for w in cw) >= 0.85:
+        sc = min(1.0, sc + 0.15)
+    return sc
 
 
 def find(cues, talks, threshold=0.8):
     results, after = [], -1.0
     for t in talks:
-        hits = [(a, b, txt, score(t["speaker"], txt)) for a, b, txt in cues]
+        hits = [(a, b, txt, score(t["speaker"], txt, t.get("company", ""))) for a, b, txt in cues]
         hits = [h for h in hits if h[3] >= threshold]
         later = [h for h in hits if h[0] > after]
         cand = later[0][0] if later else None
