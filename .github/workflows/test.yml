@@ -38,9 +38,14 @@ jobs:
       - name: Build whisper.cpp (Linux)
         if: runner.os == 'Linux'
         run: |
-          [ -d ~/whisper.cpp/.git ] || git clone -q --depth 1 --branch "$WHISPER_TAG" https://github.com/ggml-org/whisper.cpp ~/whisper.cpp
-          cd ~/whisper.cpp
-          [ -x build/bin/whisper-cli ] || { cmake -B build -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF >/dev/null && cmake --build build -j --config Release --target whisper-cli >/dev/null; }
+          # the cache restores ~/whisper.cpp/build only, so check for the binary before cloning
+          if [ ! -x ~/whisper.cpp/build/bin/whisper-cli ]; then
+            rm -rf ~/whisper.cpp
+            git clone -q --depth 1 --branch "$WHISPER_TAG" https://github.com/ggml-org/whisper.cpp ~/whisper.cpp
+            cd ~/whisper.cpp
+            cmake -B build -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_TESTS=OFF -DBUILD_SHARED_LIBS=OFF >/dev/null
+            cmake --build build -j --config Release --target whisper-cli >/dev/null
+          fi
           echo "WHISPER_BIN=$HOME/whisper.cpp/build/bin/whisper-cli" >> "$GITHUB_ENV"
 
       - name: Install tools (macOS)
