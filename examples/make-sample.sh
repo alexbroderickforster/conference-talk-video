@@ -42,31 +42,29 @@ gap 0.6
 speak a "Every release was a big event, and every release broke something in the field."
 gap 0.6
 speak a "So we asked a simple question. What would it take to ship every single week?"
-gap 0.9
+gap 0.6
 speak a "The first answer was testing. We built a simulator that runs every change against a thousand recorded shifts."
 gap 0.6
 speak a "The second answer was rollout. Every update goes to five robots first, then fifty, then the whole fleet."
-gap 0.9
+gap 0.6
 speak a "Today we ship every Tuesday, and field incidents are down by two thirds."
 gap 0.6
 speak a "The lesson is that small batches are safer, not riskier. Thank you very much."
 mark t1_speech_end
 applause 4
 mark t1_end
-gap 1
-speak host "Thank you, Dana."
-gap 1.2
+gap 3          # the next speaker walks up
 mark t2_start
 speak host "Our next speaker is Sam Okafor from Northwind, on what we learned from four hundred incidents."
 applause 3
 speak b "Hello everyone. Over three years, my team wrote up four hundred incidents."
 gap 0.6
 speak b "We read every one of them again last spring, looking for patterns."
-gap 0.9
+gap 0.6
 speak b "Pattern one. Most outages started with a change that nobody thought was risky."
 gap 0.6
 speak b "Pattern two. The fastest recoveries came from teams who could roll back in one step."
-gap 0.9
+gap 0.6
 speak b "Pattern three. Blame made the write ups shorter, and the next incident longer."
 gap 0.6
 speak b "So we made rollback a button, and we made the write ups blameless."
@@ -75,7 +73,7 @@ speak b "Our time to recover has halved. Thanks for listening."
 mark t2_speech_end
 applause 4
 mark t2_end
-gap 1
+gap 3
 speak host "That's all for this morning. Lunch is served in the main hall."
 gap 2
 

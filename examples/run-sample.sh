@@ -15,27 +15,21 @@ step "2. Transcribe";             "$S/transcribe.sh" "$REC"
 step "3. Find each talk";         "$S/find-talks.py" "$OUT/sample-recording.srt" "$OUT/schedule.txt"
 "$S/find-talks.py" "$OUT/sample-recording.srt" "$OUT/schedule.txt" --json > "$OUT/found.json"
 
-# Boundaries. Claude reads the transcript and decides; this demo uses fixed rules instead:
-#   start = the host's intro (find-talks hint), snapped to the real quiet just before speech (snap.py)
-#   end   = the speaker's last word before the long gap (applause), snapped to the quiet after it
-"$S/words.py" "$OUT/sample-recording.json" --json > "$OUT/words.json"
-python3 - "$OUT/found.json" "$OUT/words.json" > "$OUT/plan.tsv" <<'PY2'
-import json, sys
-found, words = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
-for i, t in enumerate(found):
-    if t["start_hint"] is None:
-        sys.exit(f"no intro found for {t['speaker']}")
-    nxt = found[i + 1]["start_hint"] if i + 1 < len(found) else 1e9
-    span = [k for k, w in enumerate(words[:-1]) if t["start_hint"] <= w["start"] < nxt]
-    last = [k for k in span if words[k + 1]["start"] - words[k]["end"] >= 2.5]
-    if not last:
-        sys.exit(f"can't find where {t['speaker']} stops talking")
-    slug = t["speaker"].lower().replace(" ", "-")
-    print("\t".join([slug, f"{t['start_hint']:.2f}", f"{words[last[-1]]['end'] + 1.0:.2f}", t["speaker"], t["company"], t["title"]]))
-PY2
+# Boundaries. In real use Claude reads the transcript and decides (SKILL.md step 3). The sample has a
+# few seconds of quiet between talks (the next speaker walking up), so two fixed rules stand in here:
+#   start = the host's intro (find-talks hint), snapped to the quiet just before speech resumes
+#   end   = the first quiet stretch of 1.5 s+ after the talk is under way (the applause has ended)
 : > "$OUT/cuts.tsv"
-while IFS=$'\t' read -r slug hint last speaker company title <&3; do
-  start=$("$S/snap.py" start "$REC" "$hint"); end=$("$S/snap.py" end "$REC" "$last")
+python3 -c "
+import json,sys
+for t in json.load(open(sys.argv[1])):
+    if t['start_hint'] is None: sys.exit('no intro found for '+t['speaker'])
+    print('\t'.join([t['speaker'].lower().replace(' ','-'), str(t['start_hint']), t['speaker'], t['company'], t['title']]))
+" "$OUT/found.json" > "$OUT/plan.tsv"
+while IFS=$'\t' read -r slug hint speaker company title <&3; do
+  start=$(MIN_SILENCE=1.5 "$S/snap.py" start "$REC" "$hint")
+  end=$(MIN_SILENCE=1.5 "$S/snap.py" list "$REC" "$(awk -v s="$start" 'BEGIN{print s+10}')" 100000 | awk 'NR==1{printf "%.2f", $1+0.3}')
+  [[ -n "$end" ]] || { echo "no quiet stretch after $speaker's talk"; exit 1; }
   printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$slug" "$start" "$end" "$speaker" "$company" "$title" >> "$OUT/cuts.tsv"
   echo "  $speaker: intro near ${hint}s -> cut ${start}s .. ${end}s"
 done 3< "$OUT/plan.tsv"

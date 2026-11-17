@@ -65,6 +65,7 @@ class FindTalks(unittest.TestCase):
     def test_garbled_surname_still_found(self):
         m = load("find-talks")
         self.assertGreaterEqual(m.score("Dana Reyes", "welcome Dana Raised from Acme Robotics", "Acme Robotics"), 0.8)
+        self.assertGreaterEqual(m.score("Sam Okafor", "Our next speaker is Samokafa from Northwind", "Northwind"), 0.8)
         self.assertLess(m.score("Dana Reyes", "Thank you, Dana.", "Acme Robotics"), 0.8)
         self.assertLess(m.score("Sam Okafor", "Today we ship every Tuesday", "Northwind"), 0.8)
 

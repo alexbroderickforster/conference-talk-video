@@ -69,7 +69,9 @@ def score(name, text, company=""):
         return max((difflib.SequenceMatcher(None, p, w).ratio() for w in tw), default=0.0)
     last = best(parts[-1])
     first = best(parts[0]) if len(parts) > 1 else last
-    sc = max(last, 0.6 * first + 0.4 * last if first >= 0.9 else 0.0)
+    joined = "".join(parts)                      # "Samokafa": whisper glued first name and surname
+    glued = max((difflib.SequenceMatcher(None, joined, w).ratio() for w in tw if len(w) >= len(joined) - 3), default=0.0)
+    sc = max(last, glued, 0.6 * first + 0.4 * last if first >= 0.9 else 0.0)
     cw = [w for w in words(company) if len(w) > 2 and w not in ("inc", "ltd", "llc", "the", "and")]
     if cw and max(best(w) for w in cw) >= 0.85:
         sc = min(1.0, sc + 0.15)
