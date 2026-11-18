@@ -20,9 +20,10 @@ def cues(path):
 
 def uncovered(intervals, dur, min_len):
     """Stretches of at least min_len seconds that no cue covers. Cues are merged first, so a long cue
-    with shorter ones nested inside it leaves no false gap."""
+    with shorter ones nested inside it leaves no false gap. Cue times are clamped to the media length,
+    so a cue past the end never makes nonexistent audio count as sound."""
     merged = []
-    for a, b in sorted(intervals):
+    for a, b in sorted((min(a, dur), min(b, dur)) for a, b in intervals):
         if merged and a <= merged[-1][1]:
             merged[-1][1] = max(merged[-1][1], b)
         else:

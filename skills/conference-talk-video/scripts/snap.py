@@ -44,13 +44,20 @@ def silences(video, lo, hi):
     return out
 
 
-def snap_start(video, approx, early=1.0, late=0.5):
-    """The quiet stretch the first kept word comes out of. Whisper's estimate can be early (it puts the
-    word at the start of the quiet), so the stretch may end after approx; but it must START by
-    approx + late, or it is a pause inside the speech and cutting there would drop the opening words."""
-    for a, b in silences(video, approx - 20, approx + 20):
-        if b >= approx - early and a <= approx + late:
+def snap_start(video, approx, early=1.0, tol=0.05):
+    """The quiet stretch that ends where the first kept word starts. Two cases, nothing heuristic:
+    - approx lies inside a quiet stretch: whisper put the word at the start of the quiet (it does this
+      after a silence), so the word really starts where that stretch ends;
+    - otherwise: the LAST stretch that ends at or before approx (+tol), looking back at most `early` s.
+    A stretch that begins after the word starts is never used: cutting there drops the opening words."""
+    qs = silences(video, approx - 20, approx + 20)
+    for a, b in qs:
+        if a <= approx + tol < b:
             return max(a, b - 0.25)
+    before = [(a, b) for a, b in qs if approx - early <= b <= approx + tol]
+    if before:
+        a, b = before[-1]
+        return max(a, b - 0.25)
     return None
 
 

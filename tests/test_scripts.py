@@ -146,6 +146,15 @@ class Transcribe(unittest.TestCase):
         self.m.dedupe_seams([r, e], [r])
         self.assertEqual(r["text"].strip(), "Please sit down.")
 
+    def test_dedupe_keeps_repeats_in_lines_that_do_not_overlap(self):  # r2 prior 4: 0.2 s apart
+        r, e = seg(6, 8.8, "Please sit down."), seg(9, 10, "Sit down now.")
+        self.m.dedupe_seams([r, e], [r])
+        self.assertEqual(r["text"].strip(), "Please sit down.")
+
+    def test_a_later_repeat_of_the_same_words_is_kept(self):          # r2 new 1
+        got = self.m.keep_new([seg(3.5, 4.5, "Thank you.")], 2, 10, have=[seg(0, 2, "Thank you.")])
+        self.assertEqual([g["text"].strip() for g in got], ["Thank you."])
+
     def test_split_halves_do_not_duplicate_a_line(self):             # finding 3
         first = self.m.keep_new([seg(9, 11, "one spoken line")], 0, 10.5)
         second = self.m.keep_new([seg(9, 11, "one spoken line")], 9.5, 20, have=first)
@@ -194,6 +203,12 @@ class CaptionGaps(unittest.TestCase):
         self.assertEqual(m.uncovered([(0, 25), (10, 12), (20, 22)], 25, 6), [])
         self.assertEqual(m.uncovered([(0, 5.7), (30, 33)], 52, 6), [(5.7, 30), (33, 52)])
 
+    def test_cues_past_the_end_are_clamped(self):                     # r2 P3
+        m = load("caption-gaps")
+        self.assertEqual(m.uncovered([(0, 10), (100, 101)], 25, 6), [(10, 25)])
+        t = load("transcribe")
+        self.assertEqual(t.caption_gaps([seg(0, 10, "a"), seg(100, 101, "b")], 25, 6), [(10, 25)])
+
 
 class Snap(unittest.TestCase):
     def setUp(self):
@@ -209,6 +224,16 @@ class Snap(unittest.TestCase):
     def test_start_uses_the_quiet_before_an_early_estimate(self):
         self.fake([(0, 3.01), (4.9, 5.3)])          # whisper said 0.0 s; speech starts at 3.0 s
         self.assertAlmostEqual(self.m.snap_start("v", 0), 2.76)
+
+    def test_start_never_uses_a_pause_that_begins_after_the_word(self):  # r2 prior 1
+        self.fake([(100.40, 102.0)])                # speech 100.00-100.40, then quiet
+        self.assertIsNone(self.m.snap_start("v", 100))
+        self.fake([(99.5, 99.95), (100.40, 102.0)])
+        self.assertAlmostEqual(self.m.snap_start("v", 100), 99.70)
+
+    def test_start_skips_the_pause_before_an_interjection(self):     # r2 new 2
+        self.fake([(99.30, 99.60), (99.95, 102.0)])  # unwanted words 99.60-99.95; kept speech at 102
+        self.assertAlmostEqual(self.m.snap_start("v", 100), 101.75)
 
     def test_end_takes_the_pause_right_after_the_last_word(self):     # finding 2
         self.fake([(100.05, 100.75), (110, 111)])

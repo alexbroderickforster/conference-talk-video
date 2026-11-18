@@ -77,8 +77,9 @@ def covered(intervals):
 
 
 def uncovered(intervals, dur, min_len):
+    """Gaps of at least min_len s; cue times are clamped to the media length first."""
     gaps, t = [], 0.0
-    for a, b in covered(intervals):
+    for a, b in covered([(min(a, dur), min(b, dur)) for a, b in intervals]):
         if a - t >= min_len:
             gaps.append((t, a))
         t = max(t, b)
@@ -115,12 +116,13 @@ def keep_new(new, a, b, have=()):
     return out
 
 
-def repeats_tail(s, prior, within_ms=4000):
-    """True when s only repeats the last words of a line that ended just before it: the re-transcribed
-    slice starts 0.5 s early and can hear the speaker's last words ("Thank you very much.") again."""
+def repeats_tail(s, prior, abut_ms=300):
+    """True when s only repeats the last words of a line it overlaps (or starts within 0.3 s of): the
+    re-transcribed slice starts 0.5 s early and can hear the speaker's last words ("Thank you very
+    much.") again. Decided by time first, never by text alone: the same words said later are real."""
     words = [norm(w) for w in s["text"].split()]
     for h in prior:
-        if 0 <= s["offsets"]["from"] - h["offsets"]["to"] + 1000 <= within_ms:
+        if s["offsets"]["from"] <= h["offsets"]["to"] + abut_ms and s["offsets"]["to"] > h["offsets"]["from"]:
             tail = [norm(w) for w in h["text"].split()][-len(words):]
             if words and tail == words:
                 return True
@@ -150,12 +152,12 @@ def drop_last_words(seg, k):
 
 def dedupe_seams(segs, recovered):
     """A recovered line can end with the words the next line starts with, because the re-transcribed
-    slice runs 0.5 s past the gap. Only lines that actually meet (the recovered one ends at or after
-    the next one starts, within 0.3 s) are trimmed; repeats a second or more apart are real speech."""
+    slice runs 0.5 s past the gap. Only lines whose times actually overlap (the recovered one ends after
+    the next one starts) are trimmed; the same words in lines that don't overlap are real speech."""
     ids = {id(s) for s in recovered}
     for i in range(len(segs) - 1):
         r, e = segs[i], segs[i + 1]
-        if id(r) not in ids or r["offsets"]["to"] < e["offsets"]["from"] - 300:
+        if id(r) not in ids or r["offsets"]["to"] <= e["offsets"]["from"]:
             continue
         rw, ew = r["text"].split(), e["text"].split()
         rn, en = [norm(w) for w in rw], [norm(w) for w in ew]
