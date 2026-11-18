@@ -99,6 +99,12 @@ length. Fix any cut they flag, then re-check the new edge with `words.py` and `s
 - Look before the person does: check each cut's first and last words (`words.py` on the cut) before
   sending the review copy.
 
+## Known limits: a person checks captions before publishing
+The automatic checks can't catch everything, so read the captions before they go out:
+- When a retry of a skipped stretch hears a longer version of a line it already recovered, the longer
+  version can be dropped, losing a word or two at the end of that line.
+- If the video track runs longer than the audio track, `caption-gaps.py` can report the silent tail as sound.
+
 ## Try it without real footage
 `examples/run-sample.sh` (in the plugin repo) builds a 2-minute synthetic recording, with a host and
 two talks made from text-to-speech, and runs every step above on it.

@@ -49,10 +49,11 @@ def snap_start(video, approx, early=1.0, tol=0.05):
     - approx lies inside a quiet stretch: whisper put the word at the start of the quiet (it does this
       after a silence), so the word really starts where that stretch ends;
     - otherwise: the LAST stretch that ends at or before approx (+tol), looking back at most `early` s.
-    A stretch that begins after the word starts is never used: cutting there drops the opening words."""
-    qs = silences(video, approx - 20, approx + 20)
+    A stretch must START strictly before the word, or cutting there drops the opening words. The one
+    exception is quiet from the very start of the file (0.0), which no speech can come before."""
+    qs = [(a, b) for a, b in silences(video, approx - 20, approx + 20) if a < approx or a <= 0]
     for a, b in qs:
-        if a <= approx + tol < b:
+        if b > approx + tol:
             return max(a, b - 0.25)
     before = [(a, b) for a, b in qs if approx - early <= b <= approx + tol]
     if before:

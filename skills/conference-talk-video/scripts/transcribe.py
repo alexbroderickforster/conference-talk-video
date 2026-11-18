@@ -8,6 +8,7 @@ transcribes only that window (fast boundary checks): the SRT is then on the wind
 JSON carries clock_offset_s so words.py prints times on the video's clock. A window that starts before
 0:00 is clamped to 0:00. A whole-file run refuses to replace an existing <video>.srt (it may hold hand
 fixes) unless you pass --force, which keeps the old one as <video>.srt.bak. Window runs always overwrite.
+A window with nothing left in it (`-40 40`, or a length of 0) is an error.
 
 Gap repair: whisper sometimes skips a stretch of speech, typically right after applause or music
 (the captions jump ahead 20-30 s). After the main pass this finds caption gaps longer than GAP_S
@@ -23,6 +24,10 @@ def die(msg):
     print(msg, file=sys.stderr); sys.exit(1)
 
 
+class WhisperFailed(Exception):
+    pass
+
+
 def whisper_bin():
     for c in (os.environ.get("WHISPER_BIN"), "whisper-cli", "whisper-cpp"):
         if c and shutil.which(c):
@@ -35,8 +40,11 @@ def run_whisper(wav, model, outbase):
     r = subprocess.run([whisper_bin(), "-m", model, "-l", "en", "-t", threads, "-f", wav, "-ojf", "-of", outbase],
                        capture_output=True, text=True)
     if r.returncode != 0 or not os.path.exists(outbase + ".json"):
-        die(r.stderr[-2000:] + "\nwhisper failed (run doctor.sh)")
-    return json.load(open(outbase + ".json"))["transcription"]
+        raise WhisperFailed(r.stderr[-2000:] + "\nwhisper failed (run doctor.sh)")
+    try:
+        return json.load(open(outbase + ".json"))["transcription"]
+    except (ValueError, KeyError) as e:
+        raise WhisperFailed(f"whisper wrote unreadable output ({e}); run doctor.sh")
 
 
 def ts(ms):
@@ -182,7 +190,12 @@ def repair(segs, wav, dur, model, tmp):
             if key in tried or (b - a) - quiet_seconds(wav, a, b) < 2.0:
                 continue
             tried.add(key); n += 1
-            new = retranscribe(wav, a, b, dur, model, tmp, n, have=[x for x in segs if spoken(x)])
+            try:
+                new = retranscribe(wav, a, b, dur, model, tmp, n, have=[x for x in segs if spoken(x)])
+            except (WhisperFailed, subprocess.CalledProcessError, OSError) as e:
+                # The main pass is good: keep it. The gap stays open and is reported below.
+                print(f"  WARNING: retry of caption gap {a:.1f}-{b:.1f}s failed: {str(e).strip()[-300:]}", file=sys.stderr)
+                continue
             if new:
                 segs.extend(new); recovered.extend(new)
                 print(f"  caption gap {a:.1f}-{b:.1f}s: recovered {len(new)} lines", file=sys.stderr)
@@ -216,6 +229,8 @@ def main(argv=None):
     video, ss = a[0], float(a[1]) if len(a) > 1 else 0.0
     length = float(a[2]) if len(a) > 2 else None
     ss, length = clamp_window(ss, length)
+    if length is not None and length <= 0:
+        die(f"nothing to transcribe: the window {a[1]} {a[2]} is empty once it is clamped to the start of the file")
     model = os.environ.get("WHISPER_MODEL") or die("set WHISPER_MODEL to a ggml model file (doctor.sh --get-model small.en)")
     base = os.path.splitext(video)[0] + (f".at{int(ss)}" if length else "")
     if not length and not force and os.path.exists(base + ".srt"):
@@ -228,7 +243,10 @@ def main(argv=None):
         subprocess.run(cmd, check=True)
         dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", wav],
                                    capture_output=True, text=True).stdout.strip())
-        segs = run_whisper(wav, model, os.path.join(tmp, "out"))
+        try:
+            segs = run_whisper(wav, model, os.path.join(tmp, "out"))
+        except WhisperFailed as e:
+            die(str(e))
         if os.environ.get("REPAIR", "1") != "0":
             repair(segs, wav, dur, model, tmp)
     if not length and os.path.exists(base + ".srt"):

@@ -191,6 +191,38 @@ class Transcribe(unittest.TestCase):
         self.assertEqual(self.m.caption_gaps(nested, 25, 6), [])
         self.assertEqual(self.m.caption_gaps([seg(0, 5, "a"), seg(30, 31, "b")], 40, 6), [(5, 30), (31, 40)])
 
+    def test_empty_window_is_an_error_not_a_whole_file_run(self):     # r3 P3-4
+        with tempfile.TemporaryDirectory() as d:
+            v = os.path.join(d, "talk.mp4"); open(v, "w").close()
+            for win in (["-40", "40"], ["5", "0"]):
+                r = subprocess.run([sys.executable, os.path.join(SCRIPTS, "transcribe.py"), v] + win,
+                                   capture_output=True, text=True, env=dict(os.environ, WHISPER_MODEL="/nonexistent.bin"))
+                self.assertEqual(r.returncode, 1, r.stderr)
+                self.assertIn("nothing to transcribe", r.stderr)
+            self.assertEqual(os.listdir(d), ["talk.mp4"])
+
+    def test_failed_gap_retry_keeps_the_main_pass(self):              # r3 P2-2
+        with tempfile.TemporaryDirectory() as d:
+            v = os.path.join(d, "talk.wav")
+            subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=30", v],
+                           check=True)
+            stub = os.path.join(d, "stub-whisper")
+            with open(stub, "w") as f:
+                f.write("""#!/bin/sh
+while [ $# -gt 0 ]; do [ "$1" = -of ] && out=$2; shift; done
+case "$out" in */gap*) echo boom >&2; exit 1;; esac
+printf '{"transcription":[{"offsets":{"from":0,"to":2000},"text":" hello there","tokens":[]}]}' > "$out.json"
+""")
+            os.chmod(stub, 0o755)
+            r = subprocess.run([sys.executable, os.path.join(SCRIPTS, "transcribe.py"), v], capture_output=True, text=True,
+                               env=dict(os.environ, WHISPER_BIN=stub, WHISPER_MODEL="/nonexistent.bin"))
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIn("retry of caption gap 2.0-30.0s failed", r.stderr)
+            self.assertIn("no captions for 2.0-30.0s", r.stderr)
+            with open(os.path.join(d, "talk.srt")) as f:
+                self.assertIn("hello there", f.read())
+            self.assertTrue(os.path.exists(os.path.join(d, "talk.json")))
+
     def test_shift_moves_tokens(self):
         s = self.m.shift([{"offsets": {"from": 0, "to": 1000}, "tokens": [{"offsets": {"from": 10, "to": 20}}]}], 5000)
         self.assertEqual(s[0]["timestamps"]["from"], "00:00:05,000")
@@ -230,6 +262,12 @@ class Snap(unittest.TestCase):
         self.assertIsNone(self.m.snap_start("v", 100))
         self.fake([(99.5, 99.95), (100.40, 102.0)])
         self.assertAlmostEqual(self.m.snap_start("v", 100), 99.70)
+
+    def test_start_rejects_a_pause_starting_just_after_the_word(self):  # r3 prior 1
+        self.fake([(100.04, 103.0)])
+        self.assertIsNone(self.m.snap_start("v", 100))
+        self.fake([(100.0, 103.0)])                 # starting exactly at the word is not "before" it
+        self.assertIsNone(self.m.snap_start("v", 100))
 
     def test_start_skips_the_pause_before_an_interjection(self):     # r2 new 2
         self.fake([(99.30, 99.60), (99.95, 102.0)])  # unwanted words 99.60-99.95; kept speech at 102

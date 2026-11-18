@@ -7,7 +7,7 @@
       "name": "conference-talk-video",
       "source": "./",
       "description": "Cut conference recordings into individual talks with clean starts and ends, a short review copy per talk, and ready-to-paste YouTube text, chapters and captions. Everything runs locally.",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "category": "productivity"
     }
   ]
